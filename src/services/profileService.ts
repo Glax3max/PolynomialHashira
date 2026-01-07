@@ -1,11 +1,16 @@
 import { readDb, writeDb } from "./storage/fileDb.js";
+import type { UserProfile } from "../types/domain.js";
 
-export async function getOrCreateProfile(user) {
+export async function getOrCreateProfile(user: {
+  user_id: string;
+  name?: string;
+  email?: string;
+}): Promise<UserProfile> {
   const db = await readDb();
   const existing = db.users[user.user_id];
   if (existing) return existing;
 
-  const created = {
+  const created: UserProfile = {
     user_id: user.user_id,
     name: user.name || "User",
     email: user.email || "",
@@ -17,9 +22,11 @@ export async function getOrCreateProfile(user) {
   return created;
 }
 
-export async function updateProfileName(userId, name) {
+export async function updateProfileName(userId: string, name: unknown): Promise<true> {
   if (typeof name !== "string" || !name.trim()) {
-    const err = new Error("`name` is required and must be a non-empty string");
+    const err = new Error("`name` is required and must be a non-empty string") as Error & {
+      statusCode?: number;
+    };
     err.statusCode = 400;
     throw err;
   }
@@ -27,7 +34,7 @@ export async function updateProfileName(userId, name) {
   const db = await readDb();
   const existing = db.users[userId];
   if (!existing) {
-    const err = new Error("Profile not found");
+    const err = new Error("Profile not found") as Error & { statusCode?: number };
     err.statusCode = 404;
     throw err;
   }

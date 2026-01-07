@@ -1,7 +1,13 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 
-export async function searchAndExtract(query) {
+export type SearchResult = {
+  title: string;
+  content: string;
+  url: string;
+};
+
+export async function searchAndExtract(query: string): Promise<SearchResult[]> {
   // Config
   
   // Modify query if it contains future year - search for current information instead
@@ -15,8 +21,8 @@ export async function searchAndExtract(query) {
   }
 
   const SEARCH_ENDPOINTS = [
-    q => `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`,
-    q => `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`
+    (q: string) => `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`,
+    (q: string) => `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`
   ];
 
   const HEADERS = {
@@ -29,7 +35,7 @@ export async function searchAndExtract(query) {
 
   const MAX_RESULTS = 10;
   const MAX_REDIRECTS = 3;
-  const visited = new Set();
+  const visited = new Set<string>();
 
   // Helper
 
@@ -45,17 +51,17 @@ export async function searchAndExtract(query) {
     throw new Error("Search failed (DNS / network issue)");
   };
 
-   const extractLinks = html => {
+   const extractLinks = (html: string): Array<{ title: string; href: string }> => {
   const $ = cheerio.load(html);
 
   // For debugging purposes (Just logs)
   console.log('Total <a> tags:', $('a[href]').length);
   console.log('Results containers:', $('.results, #links, .result__body, .result, .web-result').length);
 
-  const links = [];
+  const links: Array<{ title: string; href: string }> = [];
   
   // Method 1: Find all DuckDuckGo redirect links (/l/?uddg=...)
-  $('a[href*="/l/?"]').each((i, el) => {
+  $('a[href*="/l/?"]').each((i: number, el: any) => {
     const $link = $(el);
     let href = $link.attr('href');
     let title = $link.text().trim();
@@ -86,7 +92,7 @@ export async function searchAndExtract(query) {
 
   // Method 2: Try finding links in result containers
   if (links.length < 3) {
-    $('.result, .web-result, .result__body, [class*="result"]').each((i, el) => {
+    $('.result, .web-result, .result__body, [class*="result"]').each((i: number, el: any) => {
       const $result = $(el);
       const $link = $result.find('a[href]').first();
       
@@ -119,7 +125,7 @@ export async function searchAndExtract(query) {
 
   // Method 3: Fallback - find any external links (but be more lenient)
   if (links.length < 3) {
-    $('a[href]').each((i, el) => {
+    $('a[href]').each((i: number, el: any) => {
       const $link = $(el);
       let href = $link.attr('href');
       const title = $link.text().trim();
@@ -151,8 +157,8 @@ export async function searchAndExtract(query) {
   }
 
   // Remove duplicates based on URL
-  const uniqueLinks = [];
-  const seenUrls = new Set();
+  const uniqueLinks: Array<{ title: string; href: string }> = [];
+  const seenUrls = new Set<string>();
   for (const link of links) {
     try {
       const url = new URL(link.href);
@@ -171,8 +177,8 @@ export async function searchAndExtract(query) {
     console.log('Sample links:', uniqueLinks.slice(0, 3).map(l => `${l.title.substring(0, 40)} -> ${l.href.substring(0, 50)}`));
   } else {
     // Debug: log some sample hrefs to see what we're missing
-    const sampleHrefs = [];
-    $('a[href]').slice(0, 10).each((i, el) => {
+    const sampleHrefs: string[] = [];
+    $('a[href]').slice(0, 10).each((i: number, el: any) => {
       const href = $(el).attr('href');
       if (href) sampleHrefs.push(href.substring(0, 100));
     });
@@ -183,13 +189,13 @@ export async function searchAndExtract(query) {
 
 
 // Extracting the redirect
-  const extractRedirect = html =>
+  const extractRedirect = (html: string): string | null =>
     html.match(/location\.replace\("([^"]+)"\)/)?.[1] ||
     html.match(/URL=([^">]+)/)?.[1] ||
     null;
 
     // Looking for blocked url it takes a html and if it contains these strings after redirect then return null
-  const looksBlocked = html => {
+  const looksBlocked = (html: string) => {
     const t = html.toLowerCase();
     return (
       t.includes("access denied") ||
@@ -200,15 +206,15 @@ export async function searchAndExtract(query) {
   };
 
   // Extracting texts from the html 
-  const extractText = html => {
+  const extractText = (html: string) => {
     const $ = cheerio.load(html);
     $("script, style, noscript, iframe, svg").remove();
     return $("body").text().replace(/\s+/g, " ").trim();
   };
 
-  const looksUseful = text => text && text.length > 300; // Lowered threshold to get more results
+  const looksUseful = (text: string | null) => Boolean(text && text.length > 300); // Lowered threshold
 
-  const safeFetch = async (url, depth = 0) => {
+  const safeFetch = async (url: string, depth = 0): Promise<string | null> => {
     if (visited.has(url) || depth > MAX_REDIRECTS) return null;
     visited.add(url);
 
@@ -217,7 +223,7 @@ export async function searchAndExtract(query) {
         headers: HEADERS,
         timeout: 15000, // Increased timeout
         maxRedirects: 5,
-        validateStatus: s => s < 500,
+        validateStatus: (s: number) => s < 500,
         // Follow redirects automatically
         maxContentLength: 5000000, // 5MB limit
         maxBodyLength: 5000000
@@ -251,7 +257,7 @@ export async function searchAndExtract(query) {
       if (!looksUseful(text)) return null;
 
       return text;
-    } catch (error) {
+    } catch (error: any) {
       // Log error for debugging but don't fail completely
       if (error.code !== 'ECONNABORTED' && error.code !== 'ENOTFOUND') {
         // Only log non-timeout/network errors
@@ -268,7 +274,7 @@ export async function searchAndExtract(query) {
   console.log("Extracted links:", links.length);
 
   const results = await Promise.all(
-  links.map(async (link, index) => {
+  links.map(async (link: { title: string; href: string }, index: number) => {
     // Fix URL construction to handle existing protocols
     let url = link.href;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -306,7 +312,7 @@ export async function searchAndExtract(query) {
   })
 );
 
-const successfulResults = results.filter(Boolean);
+const successfulResults = results.filter(Boolean) as SearchResult[];
 console.log("Final results:", successfulResults.length);
 if (successfulResults.length < links.length) {
   console.log(`[DEBUG] Successfully scraped ${successfulResults.length} out of ${links.length} links`);
@@ -326,7 +332,7 @@ if (successfulResults.length === 0 && searchQuery !== query) {
       const fallbackLinks = extractLinks(fallbackSearch.data);
       if (fallbackLinks.length > 0) {
         const fallbackResults = await Promise.all(
-          fallbackLinks.slice(0, 5).map(async (link) => {
+          fallbackLinks.slice(0, 5).map(async (link: { title: string; href: string }) => {
             let url = link.href;
             if (!url.startsWith('http://') && !url.startsWith('https://')) {
               if (url.startsWith('//')) {
@@ -347,17 +353,17 @@ if (successfulResults.length === 0 && searchQuery !== query) {
             if (content.length > 2000) {
               content = content.substring(0, 2000);
             }
-            return { title: link.title, content, url: url };
+            return { title: link.title, content, url: url } satisfies SearchResult;
           })
         );
-        const fallbackSuccessful = fallbackResults.filter(Boolean);
+        const fallbackSuccessful = fallbackResults.filter(Boolean) as SearchResult[];
         if (fallbackSuccessful.length > 0) {
           console.log(`[DEBUG] Fallback query returned ${fallbackSuccessful.length} results`);
           return fallbackSuccessful;
         }
       }
-    } catch (e) {
-      console.log(`[DEBUG] Fallback search failed:`, e.message);
+    } catch (e: any) {
+      console.log(`[DEBUG] Fallback search failed:`, e?.message);
     }
   }
 }

@@ -2,7 +2,7 @@ import admin from "firebase-admin";
 
 let initialized = false;
 
-export function getFirebaseAdmin() {
+export function getFirebaseAdmin(): typeof admin {
   if (!initialized) {
     // Uses Application Default Credentials by default (GOOGLE_APPLICATION_CREDENTIALS)
     // Optionally uses FIREBASE_PROJECT_ID if provided.

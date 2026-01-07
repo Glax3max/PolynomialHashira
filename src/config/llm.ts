@@ -1,12 +1,13 @@
 import connectToLLm from "../../connect/connectToLLM.js";
 import { requireGeminiKey } from "./env.js";
+import type { LlmModel } from "../types/domain.js";
 
-let cachedModel = null;
+let cachedModel: LlmModel | null = null;
 
-export function getLlmModel() {
+export function getLlmModel(): LlmModel {
   if (cachedModel) return cachedModel;
   const apiKey = requireGeminiKey();
-  cachedModel = connectToLLm(apiKey);
+  cachedModel = connectToLLm(apiKey) as unknown as LlmModel;
   return cachedModel;
 }
 

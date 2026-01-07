@@ -7,8 +7,15 @@ import { searchAndExtract } from "../../service/contextForQuery.js";
 import { getLlmModel } from "../config/llm.js";
 import { readDb, writeDb } from "./storage/fileDb.js";
 import { generateAnswer } from "./answerService.js";
+import type { ChatPreview, ChatRecord, Decision, HttpError, SourceItem } from "../types/domain.js";
 
-function isLatestQuery(query) {
+type ContextResult = {
+  title?: string;
+  content?: string;
+  url?: string;
+};
+
+function isLatestQuery(query: string) {
   const q = query.toLowerCase();
   const hasLatestKeywords =
     q.includes("latest") ||
@@ -21,14 +28,14 @@ function isLatestQuery(query) {
   return { hasLatestKeywords, hasYear };
 }
 
-function extractSourcesFromContextResults(contextResults) {
+function extractSourcesFromContextResults(contextResults: ContextResult[]): SourceItem[] {
   return (contextResults || []).map(r => ({
     title: r.title || "Untitled",
     excerpt: (r.content || "").slice(0, 280)
   }));
 }
 
-function contextResultsToContextString(contextResults) {
+function contextResultsToContextString(contextResults: ContextResult[]): string {
   if (!Array.isArray(contextResults) || contextResults.length === 0) return "";
   return contextResults
     .map((result, idx) => {
@@ -37,7 +44,7 @@ function contextResultsToContextString(contextResults) {
     .join("\n---\n\n");
 }
 
-function hasUncertainty(answer) {
+function hasUncertainty(answer: string) {
   const uncertaintyIndicators = [
     "cannot provide",
     "do not have access",
@@ -56,7 +63,7 @@ function hasUncertainty(answer) {
   return uncertaintyIndicators.some(indicator => a.includes(indicator));
 }
 
-function isRecentQuery(query) {
+function isRecentQuery(query: string) {
   const q = query.toLowerCase();
   return (
     q.includes("latest") ||
@@ -71,31 +78,37 @@ function isRecentQuery(query) {
   );
 }
 
-export async function createChatForQuery({ userId, query }) {
+export async function createChatForQuery({
+  userId,
+  query
+}: {
+  userId: string;
+  query: string;
+}): Promise<ChatRecord> {
   const model = getLlmModel();
 
   const { hasLatestKeywords, hasYear } = isLatestQuery(query);
 
-  let decision = "DIRECT";
+  let decision: Decision = "DIRECT";
   if (hasLatestKeywords && hasYear) {
     decision = "SEARCH";
   } else {
     const routingRaw = await classifyQuery(query, model);
     const parsed = safeParseLLMResponse(routingRaw);
     if (!parsed?.decision) {
-      const err = new Error("Failed to route query");
+      const err = new Error("Failed to route query") as HttpError;
       err.statusCode = 500;
       throw err;
     }
-    decision = parsed.decision;
+    decision = parsed.decision as Decision;
   }
 
   let answer = "";
-  let sources = [];
-  let contextResults = [];
+  let sources: SourceItem[] = [];
+  let contextResults: ContextResult[] = [];
 
   if (decision === "SEARCH") {
-    contextResults = await searchAndExtract(query);
+    contextResults = (await searchAndExtract(query)) as unknown as ContextResult[];
     sources = extractSourcesFromContextResults(contextResults);
     const contextString = contextResultsToContextString(contextResults);
     answer = await generateAnswer({ query, contextString, model });
@@ -104,7 +117,7 @@ export async function createChatForQuery({ userId, query }) {
 
     // Fallback: if DIRECT seems uncertain for a recent query, retry with SEARCH
     if (hasUncertainty(answer) && isRecentQuery(query)) {
-      contextResults = await searchAndExtract(query);
+      contextResults = (await searchAndExtract(query)) as unknown as ContextResult[];
       sources = extractSourcesFromContextResults(contextResults);
       const contextString = contextResultsToContextString(contextResults);
       answer = await generateAnswer({ query, contextString, model });
@@ -112,7 +125,7 @@ export async function createChatForQuery({ userId, query }) {
     }
   }
 
-  const chat = {
+  const chat: ChatRecord = {
     chat_id: crypto.randomUUID(),
     user_id: userId,
     query,
@@ -129,7 +142,13 @@ export async function createChatForQuery({ userId, query }) {
   return chat;
 }
 
-export async function listChats({ userId, filter }) {
+export async function listChats({
+  userId,
+  filter
+}: {
+  userId: string;
+  filter: "all" | "search" | "direct";
+}): Promise<ChatPreview[]> {
   const db = await readDb();
   let chats = db.chats.filter(c => c.user_id === userId);
 
@@ -147,11 +166,17 @@ export async function listChats({ userId, filter }) {
   }));
 }
 
-export async function getChatById({ userId, chatId }) {
+export async function getChatById({
+  userId,
+  chatId
+}: {
+  userId: string;
+  chatId: string;
+}): Promise<Omit<ChatRecord, "user_id">> {
   const db = await readDb();
   const chat = db.chats.find(c => c.chat_id === chatId && c.user_id === userId);
   if (!chat) {
-    const err = new Error("Chat not found");
+    const err = new Error("Chat not found") as HttpError;
     err.statusCode = 404;
     throw err;
   }

@@ -1,8 +1,6 @@
-import { GoogleGenerativeAI} from "@google/generative-ai";
-// import connectToLLm from "../connect/connectToLLM";
-// const genAI = new GoogleGenerativeAI(process.env.Gemini_Key);
+import type { LlmModel } from "../src/types/domain.js";
 
-export default async function classifyQuery(query,model) {
+export default async function classifyQuery(query: string, model: LlmModel): Promise<string> {
   const prompt = `
 ### SYSTEM INSTRUCTIONS
 You are a "Query Routing Agent." Your only job is to analyze a user's request and determine if the response requires a Web Search or if it can be answered accurately using your internal knowledge.

@@ -3,8 +3,10 @@ import cors from "cors";
 
 import { apiV1Router } from "./routes/apiV1.js";
 import { errorHandler, notFound } from "./middlewares/errorHandler.js";
+import { requireAuth } from "./middlewares/auth.js";
+import { ask } from "./controllers/chatController.js";
 
-export function createApp() {
+export function createApp(): express.Express {
   const app = express();
 
   app.use(cors());
@@ -18,7 +20,7 @@ export function createApp() {
   app.use("/api/v1/name", apiV1Router);
 
   // Backwards-compatible alias (still requires auth)
-  app.post("/ask", (req, res, next) => apiV1Router.handle(req, res, next));
+  app.post("/ask", requireAuth, ask);
 
   app.get("/health", (req, res) => res.json({ ok: true }));
 

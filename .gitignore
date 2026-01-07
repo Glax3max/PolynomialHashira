@@ -31,3 +31,6 @@ temp/
 # Local file DB (created at runtime)
 data/
 
+# TypeScript build output
+dist/
+

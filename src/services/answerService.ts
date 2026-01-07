@@ -1,4 +1,14 @@
-export async function generateAnswer({ query, contextString, model }) {
+import type { LlmModel } from "../types/domain.js";
+
+export async function generateAnswer({
+  query,
+  contextString,
+  model
+}: {
+  query: string;
+  contextString: string;
+  model: LlmModel;
+}): Promise<string> {
   const hasContext = typeof contextString === "string" && contextString.trim().length > 0;
 
   const prompt = `

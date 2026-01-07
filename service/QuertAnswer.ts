@@ -1,5 +1,11 @@
 
-export async function QueryAnswer(query,context,model) {
+import type { LlmModel } from "../src/types/domain.js";
+
+export async function QueryAnswer(
+  query: string,
+  context: string,
+  model: LlmModel
+): Promise<string> {
     const prompt = `
     You are a helpful and accurate assistant.
 
