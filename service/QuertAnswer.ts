@@ -1,6 +1,7 @@
+import type { GenerativeModel } from "@google/generative-ai";
 
-export async function QueryAnswer(query,context,model) {
-    const prompt = `
+export async function QueryAnswer(query: string, context: string, model: GenerativeModel) {
+  const prompt = `
     You are a helpful and accurate assistant.
 
         You may be provided with:
@@ -42,8 +43,9 @@ export async function QueryAnswer(query,context,model) {
         ---
 
         ANSWER:
-    `
-    
-    const result = await model.generateContent(prompt);
-    return result.response.text().trim();
+    `;
+
+  const result = await model.generateContent(prompt);
+  return result.response.text().trim();
 }
+

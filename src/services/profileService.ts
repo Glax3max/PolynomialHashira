@@ -1,11 +1,15 @@
-import { readDb, writeDb } from "./storage/fileDb.js";
+import type { Request } from "express";
+import type { HttpError } from "../types/http.js";
+import { readDb, writeDb, type DbUserProfile } from "./storage/fileDb.js";
 
-export async function getOrCreateProfile(user) {
+type RequestUser = NonNullable<Request["user"]>;
+
+export async function getOrCreateProfile(user: RequestUser): Promise<DbUserProfile> {
   const db = await readDb();
   const existing = db.users[user.user_id];
   if (existing) return existing;
 
-  const created = {
+  const created: DbUserProfile = {
     user_id: user.user_id,
     name: user.name || "User",
     email: user.email || "",
@@ -17,9 +21,9 @@ export async function getOrCreateProfile(user) {
   return created;
 }
 
-export async function updateProfileName(userId, name) {
+export async function updateProfileName(userId: string, name: unknown) {
   if (typeof name !== "string" || !name.trim()) {
-    const err = new Error("`name` is required and must be a non-empty string");
+    const err: HttpError = new Error("`name` is required and must be a non-empty string");
     err.statusCode = 400;
     throw err;
   }
@@ -27,7 +31,7 @@ export async function updateProfileName(userId, name) {
   const db = await readDb();
   const existing = db.users[userId];
   if (!existing) {
-    const err = new Error("Profile not found");
+    const err: HttpError = new Error("Profile not found");
     err.statusCode = 404;
     throw err;
   }

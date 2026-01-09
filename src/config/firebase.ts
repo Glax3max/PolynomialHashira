@@ -8,11 +8,13 @@ export function getFirebaseAdmin() {
     // Optionally uses FIREBASE_PROJECT_ID if provided.
     const projectId = process.env.FIREBASE_PROJECT_ID;
 
-    admin.initializeApp(
-      projectId
-        ? { credential: admin.credential.applicationDefault(), projectId }
-        : { credential: admin.credential.applicationDefault() }
-    );
+    if (admin.apps.length === 0) {
+      admin.initializeApp(
+        projectId
+          ? { credential: admin.credential.applicationDefault(), projectId }
+          : { credential: admin.credential.applicationDefault() }
+      );
+    }
     initialized = true;
   }
   return admin;

@@ -1,4 +1,14 @@
-export async function generateAnswer({ query, contextString, model }) {
+import type { GenerativeModel } from "@google/generative-ai";
+
+export async function generateAnswer({
+  query,
+  contextString,
+  model
+}: {
+  query: string;
+  contextString: string;
+  model: GenerativeModel;
+}) {
   const hasContext = typeof contextString === "string" && contextString.trim().length > 0;
 
   const prompt = `
