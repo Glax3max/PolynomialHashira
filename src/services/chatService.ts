@@ -82,7 +82,9 @@ export async function createChatForQuery({ userId, query }: { userId: string; qu
   const { hasLatestKeywords, hasYear } = isLatestQuery(query);
 
   let decision: "DIRECT" | "SEARCH" = "DIRECT";
-  if (hasLatestKeywords && hasYear) {
+  // If the user asks for "latest/recent/current/updates" OR mentions an explicit year,
+  // we should prefer SEARCH to avoid stale answers.
+  if (hasLatestKeywords || hasYear) {
     decision = "SEARCH";
   } else {
     const routingRaw = await classifyQuery(query, model);
