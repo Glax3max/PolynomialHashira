@@ -1,5 +1,5 @@
-import { createApp } from "./src/app.js";
-import { getEnv } from "./src/config/env.js";
+import { createApp } from "./app.js";
+import { getEnv } from "./config/env.js";
 
 const { PORT } = getEnv();
 
@@ -8,3 +8,4 @@ app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`API server running on http://localhost:${PORT}`);
 });
+

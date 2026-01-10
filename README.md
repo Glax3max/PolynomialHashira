@@ -37,6 +37,12 @@ npm install
 npm run dev
 ```
 
+## TypeScript
+
+- **Dev**: `npm run dev` (runs `src/index.ts` directly)
+- **Build**: `npm run build` (emits compiled JS to `dist/`)
+- **Prod**: `npm run prod` (runs `dist/src/index.js`)
+
 ## Notes
 
 - Data is persisted locally in `./data/db.json` (configurable via `DB_PATH`).

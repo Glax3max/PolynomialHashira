@@ -1,0 +1,23 @@
+import type { NextFunction, Request, Response } from "express";
+import type { HttpError } from "../types/http.js";
+
+export function notFound(_req: Request, res: Response) {
+  return res.status(404).json({ error: "Not found" });
+}
+
+export function errorHandler(err: unknown, _req: Request, res: Response, next: NextFunction) {
+  // eslint-disable-next-line no-unused-vars
+  void next;
+
+  const e = err as HttpError;
+  const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500;
+  const message = status >= 500 ? "Internal server error" : e?.message || "Request failed";
+
+  if (status >= 500) {
+    // Avoid leaking internals but keep server logs useful
+    // eslint-disable-next-line no-console
+    console.error("[ERROR]", err);
+  }
+  return res.status(status).json({ error: message });
+}
+

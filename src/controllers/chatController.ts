@@ -1,26 +1,33 @@
+import type { NextFunction, Request, Response } from "express";
 import { getQueryFromBody } from "../models/queryModel.js";
 import { createChatForQuery, getChatById, listChats } from "../services/chatService.js";
 
-export async function home(req, res, next) {
+export async function home(req: Request, res: Response, next: NextFunction) {
   try {
     const filter = (req.query?.filter || "all").toString().toLowerCase();
     if (!["all", "search", "direct"].includes(filter)) {
       return res.status(400).json({ error: "`filter` must be one of: all, search, direct" });
     }
 
-    const chats = await listChats({ userId: req.user.user_id, filter });
+    const chats = await listChats({ userId: req.user!.user_id, filter });
     return res.json({ title: "Your Previous Chats", chats });
   } catch (err) {
     return next(err);
   }
 }
 
-export async function ask(req, res, next) {
+export async function ask(req: Request, res: Response, next: NextFunction) {
   try {
     const query = getQueryFromBody(req.body);
-    const chat = await createChatForQuery({ userId: req.user.user_id, query });
+    const chat = await createChatForQuery({ userId: req.user!.user_id, query });
 
-    const response = {
+    const response: {
+      chat_id: string;
+      decision: string;
+      answer: string;
+      created_at: string;
+      sources?: Array<{ title: string; excerpt: string }>;
+    } = {
       chat_id: chat.chat_id,
       decision: chat.decision,
       answer: chat.answer,
@@ -37,12 +44,12 @@ export async function ask(req, res, next) {
   }
 }
 
-export async function getChat(req, res, next) {
+export async function getChat(req: Request, res: Response, next: NextFunction) {
   try {
     const chatId = (req.params?.chat_id || req.query?.id || "").toString();
     if (!chatId) return res.status(400).json({ error: "`chat_id` is required" });
 
-    const chat = await getChatById({ userId: req.user.user_id, chatId });
+    const chat = await getChatById({ userId: req.user!.user_id, chatId });
     return res.json(chat);
   } catch (err) {
     return next(err);
