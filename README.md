@@ -43,6 +43,49 @@ npm run dev
 - **Build**: `npm run build` (emits compiled JS to `dist/`)
 - **Prod**: `npm run prod` (runs `dist/src/index.js`)
 
+## Deploy to Firebase (Functions + Hosting)
+
+This repo is configured to deploy your existing Express app to **Firebase Cloud Functions** and route all Hosting traffic to it (so your endpoints stay the same: `/api/v1/...`, `/health`, etc).
+
+### One-time setup (on your machine)
+
+1) Install Firebase CLI + login:
+
+```bash
+npm i -g firebase-tools
+firebase login
+```
+
+2) Connect this folder to your Firebase project:
+
+```bash
+firebase use --add
+```
+
+3) Set required secrets/env:
+
+- **Gemini key** (recommended as a Firebase Secret; it becomes `process.env.GEMINI_KEY` at runtime):
+
+```bash
+firebase functions:secrets:set GEMINI_KEY
+```
+
+### Deploy
+
+```bash
+firebase deploy --only functions,hosting
+```
+
+### Call your endpoints
+
+After deploy, your API is available at:
+
+- `https://<your-project>.web.app/health`
+- `https://<your-project>.web.app/api/v1/home`
+- `https://<your-project>.web.app/api/v1/ask`
+
+> Note: all `/api/v1/*` endpoints require `Authorization: Bearer <FIREBASE_ID_TOKEN>` (same as local).
+
 ## Notes
 
 - Data is persisted locally in `./data/db.json` (configurable via `DB_PATH`).
