@@ -3,11 +3,16 @@ import type { GenerativeModel } from "@google/generative-ai";
 export async function generateAnswer({
   query,
   contextString,
-  model
+  model,
+  image
 }: {
   query: string;
   contextString: string;
   model: GenerativeModel;
+  image?: {
+    mimeType: string;
+    dataBase64: string;
+  };
 }) {
   const hasContext = typeof contextString === "string" && contextString.trim().length > 0;
 
@@ -33,7 +38,17 @@ ${query}
 ANSWER:
 `;
 
-  const result = await model.generateContent(prompt);
+  // If an image is provided, send a multimodal request (image + prompt).
+  // We keep the prompt as the text part so existing behavior stays the same for text-only calls.
+  const input = image?.dataBase64
+    ? ([
+        { inlineData: { mimeType: image.mimeType, data: image.dataBase64 } },
+        { text: prompt }
+      ] as unknown)
+    : prompt;
+
+  // @ts-expect-error SDK accepts multimodal parts but types vary by version
+  const result = await model.generateContent(input);
   return result.response.text().trim();
 }
 

@@ -76,7 +76,21 @@ function isRecentQuery(query: string) {
   );
 }
 
-export async function createChatForQuery({ userId, query }: { userId: string; query: string }) {
+export type LlmImageInput = {
+  mimeType: string;
+  dataBase64: string;
+  size: number;
+};
+
+export async function createChatForQuery({
+  userId,
+  query,
+  image
+}: {
+  userId: string;
+  query: string;
+  image?: LlmImageInput;
+}) {
   const model = getLlmModel();
 
   const { hasLatestKeywords, hasYear } = isLatestQuery(query);
@@ -101,20 +115,22 @@ export async function createChatForQuery({ userId, query }: { userId: string; qu
   let sources: Array<{ title: string; excerpt: string }> = [];
   let contextResults: Array<{ title?: string; content?: string; url?: string }> = [];
 
+  const hasImage = Boolean(image?.dataBase64);
+
   if (decision === "SEARCH") {
     contextResults = (await searchAndExtract(query)) as typeof contextResults;
     sources = extractSourcesFromContextResults(contextResults);
     const contextString = contextResultsToContextString(contextResults);
-    answer = await generateAnswer({ query, contextString, model });
+    answer = await generateAnswer({ query, contextString, model, image });
   } else {
-    answer = await generateAnswer({ query, contextString: "", model });
+    answer = await generateAnswer({ query, contextString: "", model, image });
 
     // Fallback: if DIRECT seems uncertain for a recent query, retry with SEARCH
     if (hasUncertainty(answer) && isRecentQuery(query)) {
       contextResults = (await searchAndExtract(query)) as typeof contextResults;
       sources = extractSourcesFromContextResults(contextResults);
       const contextString = contextResultsToContextString(contextResults);
-      answer = await generateAnswer({ query, contextString, model });
+      answer = await generateAnswer({ query, contextString, model, image });
       decision = "SEARCH";
     }
   }
@@ -125,6 +141,7 @@ export async function createChatForQuery({ userId, query }: { userId: string; qu
     query,
     decision,
     answer,
+    has_image: hasImage ? true : undefined,
     sources: decision === "SEARCH" ? sources : undefined,
     created_at: new Date().toISOString()
   };
