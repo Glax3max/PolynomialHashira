@@ -14,6 +14,7 @@ export type DbChat = {
   query: string;
   decision: "DIRECT" | "SEARCH" | string;
   answer: string;
+  has_image?: boolean;
   sources?: Array<{ title: string; excerpt: string }>;
   created_at: string;
 };

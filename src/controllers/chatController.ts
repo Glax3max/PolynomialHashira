@@ -19,7 +19,17 @@ export async function home(req: Request, res: Response, next: NextFunction) {
 export async function ask(req: Request, res: Response, next: NextFunction) {
   try {
     const query = getQueryFromBody(req.body);
-    const chat = await createChatForQuery({ userId: req.user!.user_id, query });
+    const imageFile = (req as Request & { file?: Express.Multer.File }).file;
+    const image =
+      imageFile && imageFile.buffer
+        ? {
+            mimeType: imageFile.mimetype || "application/octet-stream",
+            dataBase64: imageFile.buffer.toString("base64"),
+            size: imageFile.size || imageFile.buffer.length
+          }
+        : undefined;
+
+    const chat = await createChatForQuery({ userId: req.user!.user_id, query, image });
 
     const response: {
       chat_id: string;
@@ -27,6 +37,7 @@ export async function ask(req: Request, res: Response, next: NextFunction) {
       answer: string;
       created_at: string;
       sources?: Array<{ title: string; excerpt: string }>;
+      has_image?: boolean;
     } = {
       chat_id: chat.chat_id,
       decision: chat.decision,
@@ -36,6 +47,9 @@ export async function ask(req: Request, res: Response, next: NextFunction) {
 
     if (chat.decision === "SEARCH") {
       response.sources = chat.sources || [];
+    }
+    if (chat.has_image) {
+      response.has_image = true;
     }
 
     return res.json(response);
