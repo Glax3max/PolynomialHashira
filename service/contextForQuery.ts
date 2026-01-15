@@ -1,5 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { Readability } from "@mozilla/readability";
+import { JSDOM } from "jsdom";
 
 type SearchLink = { title: string; href: string };
 export type SearchExtractResult = { title: string; content: string; url: string };
@@ -29,9 +31,73 @@ export async function searchAndExtract(query: string): Promise<SearchExtractResu
     Referer: "https://duckduckgo.com/"
   };
 
+  // Some sites block requests that include a mismatched Referer (e.g. always DuckDuckGo).
+  // Use a separate header set for fetching result pages.
+  const PAGE_HEADERS = {
+    "User-Agent": HEADERS["User-Agent"],
+    Accept: "text/html,application/xhtml+xml",
+    "Accept-Language": HEADERS["Accept-Language"]
+  };
+
   const MAX_RESULTS = 10;
   const MAX_REDIRECTS = 3;
   const visited = new Set<string>();
+
+  const normalizeDdGHref = (rawHref: string | null | undefined): string | null => {
+    if (!rawHref) return null;
+
+    let href = rawHref.trim();
+    if (!href) return null;
+
+    // Fix HTML entity encoding sometimes present in attribute values.
+    href = href.replace(/&amp;/g, "&");
+
+    if (href.startsWith("//")) href = `https:${href}`;
+
+    // Resolve DuckDuckGo redirect links to the actual destination.
+    // Examples:
+    // - /l/?uddg=https%3A%2F%2Fexample.com
+    // - https://duckduckgo.com/l/?uddg=...
+    if (href.startsWith("/l/?") || href.includes("duckduckgo.com/l/?")) {
+      try {
+        const u = href.startsWith("http") ? new URL(href) : new URL(href, "https://duckduckgo.com");
+        const uddg = u.searchParams.get("uddg");
+        if (!uddg) return null;
+
+        // DDG sometimes double-encodes; decode at most twice.
+        let decoded = uddg;
+        for (let i = 0; i < 2; i++) {
+          try {
+            const next = decodeURIComponent(decoded);
+            if (next === decoded) break;
+            decoded = next;
+          } catch {
+            break;
+          }
+        }
+        href = decoded;
+      } catch {
+        return null;
+      }
+    }
+
+    // Only allow absolute http(s) URLs at this point.
+    if (!href.startsWith("http://") && !href.startsWith("https://")) return null;
+
+    // Exclude obvious DDG ad/tracking endpoints that can slip through uddg decoding.
+    try {
+      const u = new URL(href);
+      const host = u.hostname.toLowerCase();
+      const path = u.pathname.toLowerCase();
+      if (host.includes("duckduckgo.com") || host === "duck.com") return null;
+      if (path.endsWith("/y.js") || u.searchParams.has("ad_domain") || u.searchParams.has("ad_provider"))
+        return null;
+    } catch {
+      return null;
+    }
+
+    return href;
+  };
 
   const fetchSearch = async () => {
     for (const build of SEARCH_ENDPOINTS) {
@@ -60,40 +126,17 @@ export async function searchAndExtract(query: string): Promise<SearchExtractResu
 
     const links: SearchLink[] = [];
 
-    // Method 1: Find all DuckDuckGo redirect links (/l/?uddg=...)
-    $('a[href*="/l/?"]').each((_i, el) => {
-      const $link = $(el);
-      let href = $link.attr("href");
-      let title = $link.text().trim();
-
-      // Get title from parent or sibling if link text is empty
-      if (!title || title.length < 5) {
-        title =
-          $link
-            .closest(".result, .web-result, .result__body")
-            .find(".result__title, .result-title, h2, h3, .result__a")
-            .first()
-            .text()
-            .trim() || title;
-      }
-
-      if (href && href.includes("/l/?")) {
-        // Extract the actual URL from DuckDuckGo redirect
-        const match = href.match(/uddg=([^&"']+)/);
-        if (match) {
-          try {
-            href = decodeURIComponent(match[1]);
-            // Validate it's a proper URL
-            if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
-              if (title.length > 5) {
-                links.push({ title, href });
-              }
-            }
-          } catch {
-            // Skip if decoding fails
-          }
-        }
-      }
+    // Method 1 (preferred): Result title links on DuckDuckGo HTML.
+    // This avoids picking up nav/footer links and ad tracking URLs.
+    $(".result__a, .result__title a, a.result__a").each((_i, el) => {
+      const $a = $(el);
+      const title =
+        ($a.text().trim() || $a.attr("aria-label") || $a.attr("title") || "").toString().trim();
+      const href = normalizeDdGHref($a.attr("href"));
+      if (!href) return;
+      if (title.length <= 5) return;
+      if (href.match(/\.(jpg|jpeg|png|gif|pdf|css|js|ico|svg)$/i)) return;
+      links.push({ title, href });
     });
 
     // Method 2: Try finding links in result containers
@@ -103,28 +146,14 @@ export async function searchAndExtract(query: string): Promise<SearchExtractResu
         const $link = $result.find("a[href]").first();
 
         if ($link.length) {
-          let href = $link.attr("href");
-          let title = $link.text().trim() || $result.find(".result__title, h2, h3").first().text().trim();
-
-          // Handle DuckDuckGo redirect URLs
-          if (href && href.includes("/l/?")) {
-            const match = href.match(/uddg=([^&"']+)/);
-            if (match) {
-              try {
-                href = decodeURIComponent(match[1]);
-              } catch {
-                return;
-              }
-            } else {
-              return;
-            }
-          }
+          const href = normalizeDdGHref($link.attr("href"));
+          const title =
+            $link.text().trim() || $result.find(".result__title, h2, h3").first().text().trim();
 
           // Only add if it's a valid external URL
           if (
             href &&
             (href.startsWith("http://") || href.startsWith("https://")) &&
-            !href.includes("duckduckgo.com") &&
             title.length > 5
           ) {
             links.push({ title, href });
@@ -137,28 +166,13 @@ export async function searchAndExtract(query: string): Promise<SearchExtractResu
     if (links.length < 3) {
       $("a[href]").each((_i, el) => {
         const $link = $(el);
-        let href = $link.attr("href");
+        const href = normalizeDdGHref($link.attr("href"));
         const title = $link.text().trim();
-
-        // Skip if it's a DuckDuckGo redirect we haven't processed
-        if (href && href.includes("/l/?")) {
-          const match = href.match(/uddg=([^&"']+)/);
-          if (match) {
-            try {
-              href = decodeURIComponent(match[1]);
-            } catch {
-              return;
-            }
-          } else {
-            return;
-          }
-        }
 
         // Only add external HTTP/HTTPS links
         if (
           href &&
           (href.startsWith("http://") || href.startsWith("https://")) &&
-          !href.includes("duckduckgo.com") &&
           !href.includes("javascript:") &&
           title.length > 5 &&
           !$link.closest(".header, .footer, nav, .sidebar, .no-results").length &&
@@ -222,6 +236,19 @@ export async function searchAndExtract(query: string): Promise<SearchExtractResu
   };
 
   const extractText = (html: string) => {
+    // Prefer extracting the "main article" text when possible.
+    // This improves content quality vs taking the entire <body> text (nav/menus/cookie banners).
+    try {
+      const dom = new JSDOM(html, { url: "https://example.com" });
+      const reader = new Readability(dom.window.document);
+      const article = reader.parse();
+      const text = (article?.textContent || "").replace(/\s+/g, " ").trim();
+      dom.window.close();
+      if (text.length > 0) return text;
+    } catch {
+      // fallback below
+    }
+
     const $ = cheerio.load(html);
     $("script, style, noscript, iframe, svg").remove();
     return $("body").text().replace(/\s+/g, " ").trim();
@@ -235,13 +262,20 @@ export async function searchAndExtract(query: string): Promise<SearchExtractResu
 
     try {
       const res = await axios.get<string>(url, {
-        headers: HEADERS,
+        headers: PAGE_HEADERS,
         timeout: 15000, // Increased timeout
         maxRedirects: 5,
         validateStatus: s => s < 500,
         maxContentLength: 5000000, // 5MB limit
         maxBodyLength: 5000000
       });
+
+      // Treat 4xx as failures (often blocks or paywalls).
+      if (res.status >= 400) return null;
+
+      const contentType = (res.headers?.["content-type"] || "").toString().toLowerCase();
+      if (contentType && !contentType.includes("text/html") && !contentType.includes("application/xhtml+xml"))
+        return null;
 
       let html = res.data;
       if (typeof html !== "string") {
